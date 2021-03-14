@@ -27,13 +27,59 @@ async def on_ready():
 @bot.command(name='stats', help='Displays player\'s level, rank, etc')
 async def rank(ctx, arg):
     me = watcher.summoner.by_name(my_region, arg)
+    #For Debugging
     print(me)
+    
     my_ranked_stats = watcher.league.by_summoner(my_region, me['id'])
     print(my_ranked_stats)
-    tier = my_ranked_stats[0]['tier']
-    rank = my_ranked_stats[0]['rank']
-    LeagPoints = my_ranked_stats[0]['leaguePoints']
-    await ctx.send(arg + ' is ranked ' + tier + ' ' + rank + ' (' + str(LeagPoints) + ' LP)'+ ' in Solo/Duo')
+
+    soloduo = 0
+    flex = 1
+    if my_ranked_stats[0]['queueType'] == 'RANKED_SOLO_5x5':
+      soloduo = 0
+      flex = 1
+    else:
+      soloduo = 1
+      flex=0
+   #Tier e.g. GOLD
+    tier = my_ranked_stats[soloduo]['tier']
+    #Rank e.g. IV
+    rank = my_ranked_stats[soloduo]['rank']
+    #LP e.g. 15
+    LeaguePoints = my_ranked_stats[soloduo]['leaguePoints']
+    #FullRank
+    fullrank = tier+' '+rank+' ('+str(LeaguePoints)+' LP )'
+    #Summoner Level e.g. 189
+    sumlevel = me['summonerLevel']
+    #Wins
+    wins = my_ranked_stats[soloduo]['wins']
+    #Losses
+    losses = my_ranked_stats[soloduo]['losses']
+    #Winrate
+    winrate = "{:.2f}".format(wins/(wins+losses))
+    #Inactive e.g. True
+    inactive = my_ranked_stats[soloduo]['inactive']
+    #HotStreak e.g. False
+    hotStreak = my_ranked_stats[soloduo]['hotStreak']
+    #Icon e.g. 1257
+    icon = me['profileIconId']
+    iconlink = "http://ddragon.leagueoflegends.com/cdn/10.18.1/img/profileicon/" + str(icon)+".png"
+    #Extra for hot streaks etc
+    extra = ''
+    if hotStreak: 
+      extra = '*This player is on a hot streak!*'
+
+    #Embed Creation 
+    embedVar = discord.Embed(title=arg, description='', color=0xb38531)
+    embedVar.add_field(name="Level", value=str(sumlevel), inline=True)
+    embedVar.add_field(name="Ranked Solo/Duo", value=fullrank, inline=True)
+    embedVar.add_field(name="Winrate (Solo/Duo)", value=str(winrate) +'%', inline=False)
+    embedVar.set_image(url=iconlink)
+    #Image Link for debugging
+    print(iconlink)
+    
+    #Send Reply
+    await ctx.send(embed=embedVar)
 
 
 
