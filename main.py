@@ -41,7 +41,7 @@ async def on_ready():
   activity = discord.Game(name="Zoe Best Champ", type=3)
   await bot.change_presence(status=discord.Status.online, activity=activity)
   #Ready
-  print('Ready as {0.user}'.format(bot))
+  print('Bot ready ( {0.user} )'.format(bot))
 
 
 class RankedStats: 
@@ -69,6 +69,12 @@ class ChampStats:
         self.assists = assists
         self.kda = kda
 
+class team: 
+    def __init__(self): 
+        self.names = []
+        self.champs = []
+        self.ranks = []
+
 #def getchampstats()
 
 #Funtion that returns 
@@ -77,7 +83,7 @@ def getrankedstats(my_ranked_stats,queuetype):
     tier = "N/A"
     rank = "N/A"
     LeaguePoints = 0
-    fullrank = "N/A"
+    fullrank = "Unranked"
     wins = 0
     losses = 0
     winrate = 0
@@ -100,6 +106,7 @@ def getrankedstats(my_ranked_stats,queuetype):
     strwinrate = str(winrate) + "%"
   return RankedStats(tier, rank, LeaguePoints, fullrank, wins, losses, winrate, strwinrate)
 
+#Returns champion data based on their key
 def returnchamp(json_object, ID, target):
     for dict,champ in json_object['data'].items():
         if str(champ['key']) == str(ID):
@@ -107,31 +114,22 @@ def returnchamp(json_object, ID, target):
           #print(champ[target])
           return champ[target]
 
-@bot.command(name='stats', help='Displays player\'s level, rank, etc')
-async def rank(ctx, arg):
-    #Checks for errors returned from the API
-    #print(versions)
-    
-    try:
+#Gets info from the Summoner API
+def getsuminfo(ctx,arg):
+  channel = bot.get_channel(ctx.channel.id)
+  try:
       me = watcher.summoner.by_name(my_region, arg)
-    except ApiError as err:
+  except ApiError as err:
       if err.response.status_code == 404:
-        await ctx.send('A summoner with this username does not exist in this server')
-        return
+        bot.loop.create_task(channel.send('A summoner with this username does not exist in this server'))
+        return 0
+      elif err.response.status_code == 403:
+        bot.loop.create_task(channel.send('Please contact the bot\'s developer: Error 403'))
+        return 0
+  return me
 
-    #For Debugging
-    print(me)
-
-    #Summoner Level e.g. 189
-    sumlevel = me['summonerLevel']
-    #Icon e.g. 1257
-    icon = me['profileIconId']
-    iconlink = "http://ddragon.leagueoflegends.com/cdn/" + latest_version +"/img/profileicon/" + str(icon)+".png"
-    
-    my_ranked_stats = watcher.league.by_summoner(my_region, me['id'])
-    print(my_ranked_stats)
-    
-    #Determine if the summoner is ranked in solo/flex queues
+#0 is soloduo 1 is flex
+def getqueuenums(my_ranked_stats, queue):
     if len(my_ranked_stats) == 0:
       soloduo = 2
       flex = 2
@@ -149,12 +147,43 @@ async def rank(ctx, arg):
       else:
         soloduo = 1
         flex = 0
+    if queue == 0: 
+      return soloduo
+    else: 
+      return flex
+
+
+
+
+
+#COMMANDS
+
+
+@bot.command(name='stats', help='Get player stats')
+async def rank(ctx, arg):
+    #Checks for errors returned from the API
+    #print(versions)
+    me = getsuminfo(ctx,arg)
+    if me == 0:
+      return
+    
+
+    #For Debugging
+    print(me)
+
+    #Summoner Level e.g. 189
+    sumlevel = me['summonerLevel']
+    #Icon e.g. 1257
+    icon = me['profileIconId']
+    iconlink = "http://ddragon.leagueoflegends.com/cdn/" + latest_version +"/img/profileicon/" + str(icon)+".png"
+    
+    my_ranked_stats = watcher.league.by_summoner(my_region, me['id'])
+    print(my_ranked_stats)
       
     #Get stats for solo/flex queues
-    soloduostats = getrankedstats(my_ranked_stats,soloduo)
-    flexstats = getrankedstats(my_ranked_stats,flex)
-    print(soloduo)
-    print(flex)
+    soloduostats = getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,0))
+    flexstats = getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,1))
+
     print(soloduostats.fullrank)
 
     mastery_pages = watcher.champion_mastery.by_summoner(my_region, me['id'])
@@ -205,11 +234,66 @@ async def free(ctx):
   #Send embed
   await ctx.send(embed=embedVar)
 
+@bot.command(name='game', help='Get current game info for a summoner')
+async def game(ctx, arg):
+  
+  #Get summoner info
+  me = getsuminfo(ctx,arg)
+  
+  #Get match info
+  try:
+      specinfo = watcher.spectator.by_summoner(my_region, me["id"])
+  except ApiError as err:
+      if err.response.status_code == 404:
+        await ctx.send('This summoner is not currently in a game')
+        return
+      elif err.response.status_code == 403:
+        await ctx.send('Please contact the bot\'s developer: Error 403')
+        return
+  
+  #print(specinfo)
+  blue=team()
+  red=team()
+  gametime = str(int((specinfo["gameLength"]+180)/60)) +":" + str(int(specinfo["gameLength"])%60)
+  
+  for x in range(len(specinfo["participants"])):
+    
+    if specinfo["participants"][x]["teamId"] == 100:
+      blue.names.append(specinfo["participants"][x]['summonerName'])
+      blue.champs.append(returnchamp(champ_list,specinfo["participants"][x]['championId'],'name'))
+      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][x]['summonerId'])
+      mode = 0
+      blue.ranks.append(getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,mode)).fullrank)
+    
+    else:
+      red.names.append(specinfo["participants"][x]['summonerName'])
+      red.champs.append(returnchamp(champ_list,specinfo["participants"][x]['championId'],'name'))
+      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][x]['summonerId'])
+      mode = 0
+      red.ranks.append(getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,mode)).fullrank)
+  
+  #print (blue.ranks)
+  #print(red)
 
+  #BLUE TEAM
+  BlueEmbed = discord.Embed(title="Blue Team", description="Match Time: " + gametime, color=0x3266a8)
+  BlueEmbed.add_field(name="Summoner", value="\n ".join(str(item) for item in blue.names), inline=True)
+  BlueEmbed.add_field(name="Champion", value="\n ".join(str(item) for item in blue.champs), inline=True)
+  BlueEmbed.add_field(name="Rank", value="\n ".join(str(item) for item in blue.ranks), inline=True)
+
+  #RED TEAM
+  RedEmbed = discord.Embed(title="Red Team", description=" ", color=0xb82121)
+  RedEmbed.add_field(name="Summoner", value="\n ".join(str(item) for item in red.names), inline=True)
+  RedEmbed.add_field(name="Champion", value="\n ".join(str(item) for item in red.champs), inline=True)
+  RedEmbed.add_field(name="Rank", value="\n ".join(str(item) for item in red.ranks), inline=True)
+  await ctx.send(embed=BlueEmbed)
+  await ctx.send(embed=RedEmbed)
+
+#FOR TESTING PURPOSES
 @bot.command(name='pop', help='pop')
 async def test(ctx):
-
-    await ctx.send('pop')
+  
+  await ctx.send('pop')
 
 
 
