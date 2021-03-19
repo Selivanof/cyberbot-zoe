@@ -2,3 +2,5 @@
 
 ## Purpose
 While the functionality of this bot is nothing new, it is an opportunity for me to learn writing code in python and using APIs
+
+Currently used in a private server - still in development
