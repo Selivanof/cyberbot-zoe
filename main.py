@@ -8,6 +8,7 @@ from discord.ext import commands
 from keep_alive import keep_alive
 from riotwatcher import LolWatcher, ApiError
 from urllib.request import urlopen
+from roleidentification import pull_data, get_roles
 import pandas as pd
 
 client = discord.Client()
@@ -18,16 +19,28 @@ watcher = LolWatcher(api_key)
 
 #League region
 my_region = 'eun1'
-
+ 
 #Gets the latest version of the game from DataDragon
+
 versions_url = urlopen("https://ddragon.leagueoflegends.com/api/versions.json")
 versions = json.loads(versions_url.read())
 latest_version = versions[0]
 #Display current league version in console
 print("League of Legends version: " + latest_version)
 
+print("\nLoading queue data...")
+queuetypes = json.loads(urlopen("http://static.developer.riotgames.com/docs/lol/queues.json").read())
+print("Queue data loaded")
 
+print("\nLoading roles data...")
+champion_roles = pull_data()
+print("Roles data loaded")
+
+
+
+print("\nLoading champion data...")
 champ_list = watcher.data_dragon.champions(latest_version, False, 'en_US')
+print("Champion data loaded")
 
 
 
@@ -73,6 +86,7 @@ class team:
     def __init__(self): 
         self.names = []
         self.champs = []
+        self.champkeys = []
         self.ranks = []
 
 #def getchampstats()
@@ -234,8 +248,9 @@ async def free(ctx):
   #Send embed
   await ctx.send(embed=embedVar)
 
+#GET CURRENT GAME INFO
 @bot.command(name='game', help='Get current game info for a summoner')
-async def game(ctx, arg):
+async def game(ctx, arg, sum='None'):
   
   #Get summoner info
   me = getsuminfo(ctx,arg)
@@ -251,43 +266,89 @@ async def game(ctx, arg):
         await ctx.send('Please contact the bot\'s developer: Error 403')
         return
   
-  #print(specinfo)
+  print(specinfo)
   blue=team()
   red=team()
   gametime = str(int((specinfo["gameLength"]+180)/60)) +":" + str(int(specinfo["gameLength"])%60)
   
+  for x in range(len(queuetypes)):
+    if str(queuetypes[x]["queueId"]) == str(specinfo["gameQueueConfigId"]):
+      game_mode = queuetypes[x]["description"]
+
+  game_mode = game_mode.rsplit(' ', 1)[0]
+  #print(game_mode)
+
+  if specinfo["gameQueueConfigId"] == 440:
+    mode = 1
+  else:
+    mode = 0
+  
+ #Getting keys
+  bluekeys = []
+  redkeys = []
+
   for x in range(len(specinfo["participants"])):
-    
     if specinfo["participants"][x]["teamId"] == 100:
-      blue.names.append(specinfo["participants"][x]['summonerName'])
-      blue.champs.append(returnchamp(champ_list,specinfo["participants"][x]['championId'],'name'))
-      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][x]['summonerId'])
+      bluekeys.append(specinfo["participants"][x]['championId'])
+    else:
+      redkeys.append(specinfo["participants"][x]['championId'])
+
+#Getting roles
+  blueroles=get_roles(champion_roles,bluekeys)
+  redroles=get_roles(champion_roles,redkeys)
+  blueindex = []
+  redindex = []
+  for role,key in blueroles.items():
+    for x in range(len(bluekeys)):
+      if key == bluekeys[x]:
+        blueindex.append(x)
+  for role,key in redroles.items():
+    for x in range(len(redkeys)):
+      if key == redkeys[x]:
+        redindex.append(x)
+  
+  #Getting info
+  for x in range(len(specinfo["participants"])):
+    if specinfo["participants"][x]["teamId"] == 100:
+      blue.names.append(specinfo["participants"][blueindex[x]]['summonerName'])
+      blue.champs.append(returnchamp(champ_list,specinfo["participants"][blueindex[x]]['championId'],'name'))
+      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][blueindex[x]]['summonerId'])
       mode = 0
       blue.ranks.append(getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,mode)).fullrank)
-    
     else:
-      red.names.append(specinfo["participants"][x]['summonerName'])
-      red.champs.append(returnchamp(champ_list,specinfo["participants"][x]['championId'],'name'))
-      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][x]['summonerId'])
+      red.names.append(specinfo["participants"][redindex[x-5]+5]['summonerName'])
+      red.champs.append(returnchamp(champ_list,specinfo["participants"][redindex[x-5]+5]['championId'],'name'))
+      my_ranked_stats = watcher.league.by_summoner(my_region, specinfo["participants"][redindex[x-5]+5]['summonerId'])
       mode = 0
       red.ranks.append(getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,mode)).fullrank)
-  
+
+  print(blueroles)
+
+
+ 
   #print (blue.ranks)
   #print(red)
-
+  GeneralEmbed = discord.Embed(title="**"+ game_mode +"**  ", description="Match Time: " + gametime, color=0xb38531)
+  
+  
   #BLUE TEAM
-  BlueEmbed = discord.Embed(title="Blue Team", description="Match Time: " + gametime, color=0x3266a8)
-  BlueEmbed.add_field(name="Summoner", value="\n ".join(str(item) for item in blue.names), inline=True)
+  BlueEmbed = discord.Embed(title="Blue Team", description=" ", color=0x3266a8)
+  BlueEmbed.add_field(name="  Summoner", value="\n ".join(str(item) for item in blue.names), inline=True)
   BlueEmbed.add_field(name="Champion", value="\n ".join(str(item) for item in blue.champs), inline=True)
   BlueEmbed.add_field(name="Rank", value="\n ".join(str(item) for item in blue.ranks), inline=True)
-
+  
   #RED TEAM
   RedEmbed = discord.Embed(title="Red Team", description=" ", color=0xb82121)
-  RedEmbed.add_field(name="Summoner", value="\n ".join(str(item) for item in red.names), inline=True)
+  RedEmbed.add_field(name="  Summoner", value="\n ".join(str(item) for item in red.names), inline=True)
   RedEmbed.add_field(name="Champion", value="\n ".join(str(item) for item in red.champs), inline=True)
   RedEmbed.add_field(name="Rank", value="\n ".join(str(item) for item in red.ranks), inline=True)
+  await ctx.send(embed=GeneralEmbed)
   await ctx.send(embed=BlueEmbed)
   await ctx.send(embed=RedEmbed)
+  
+  
+  
+
 
 #FOR TESTING PURPOSES
 @bot.command(name='pop', help='pop')
