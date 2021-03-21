@@ -1,3 +1,4 @@
+#pip install git+https://github.com/meraki-analytics/role-identification.git
 import discord
 import os
 import requests
@@ -290,18 +291,25 @@ async def game(ctx, arg, sum='None'):
   for x in range(len(specinfo["participants"])):
     if specinfo["participants"][x]["teamId"] == 100:
       bluekeys.append(specinfo["participants"][x]['championId'])
+      
+      if specinfo["participants"][x]['spell1Id'] == 11 or specinfo["participants"][x]['spell2Id'] == 11:
+        bluejungler = specinfo["participants"][x]['championId']
     else:
       redkeys.append(specinfo["participants"][x]['championId'])
+      
+      if specinfo["participants"][x]['spell1Id'] == 11 or specinfo["participants"][x]['spell2Id'] == 11:
+        redjungler = specinfo["participants"][x]['championId']
 
 #Getting roles
-  blueroles=get_roles(champion_roles,bluekeys)
-  redroles=get_roles(champion_roles,redkeys)
+  blueroles=get_roles(champion_roles,bluekeys,jungle=bluejungler)
+  redroles=get_roles(champion_roles,redkeys,jungle=redjungler)
   blueindex = []
   redindex = []
   for role,key in blueroles.items():
     for x in range(len(bluekeys)):
       if key == bluekeys[x]:
         blueindex.append(x)
+        
   for role,key in redroles.items():
     for x in range(len(redkeys)):
       if key == redkeys[x]:
