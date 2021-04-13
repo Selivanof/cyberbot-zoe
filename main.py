@@ -1,4 +1,5 @@
-#pip install git+https://github.com/meraki-analytics/role-identification.git
+# install +https://.com/meraki-analytics/-.git
+#pip install colorthief
 import discord
 import os
 import requests
@@ -8,9 +9,11 @@ import urllib
 from discord.ext import commands
 from keep_alive import keep_alive
 from riotwatcher import LolWatcher, ApiError
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from roleidentification import pull_data, get_roles
 import pandas as pd
+from colorthief import ColorThief
+import io
 
 client = discord.Client()
 
@@ -70,11 +73,12 @@ class RankedStats:
         self.strwinrate = strwinrate
 
 class ChampStats: 
-    def __init__(self, key, name, masteryPoints, masteryLevel, wins, losses, winrate, kills, deaths, assists, kda): 
+    def __init__(self, key, name, masteryPoints, masteryLevel, masteryTokens, wins, losses, winrate, kills, deaths, assists, kda, totalmatches, samplematches): 
         self.key = key
         self.name = name
         self.masteryPoints = masteryPoints
         self.masteryLevel = masteryLevel
+        self.masteryTokens = masteryTokens
         self.wins = wins
         self.losses = losses
         self.winrate = winrate
@@ -82,6 +86,8 @@ class ChampStats:
         self.deaths = deaths
         self.assists = assists
         self.kda = kda
+        self.totalmatches = totalmatches
+        self.samplematches = samplematches
 
 class team: 
     def __init__(self): 
@@ -89,6 +95,8 @@ class team:
         self.champs = []
         self.champkeys = []
         self.ranks = []
+
+
 
 #def getchampstats()
 
@@ -129,8 +137,16 @@ def returnchamp(json_object, ID, target):
           #print(champ[target])
           return champ[target]
 
+def getchampid(json_object, name):
+    for dict,champ in json_object['data'].items():
+        if str(champ['name']) == name:
+          #print(champ['key'])
+          #print(champ[target])
+          return champ['key']
+
+
 #Gets info from the Summoner API
-def getsuminfo(ctx,arg):
+def getsuminfo(ctx, arg):
   channel = bot.get_channel(ctx.channel.id)
   try:
       me = watcher.summoner.by_name(my_region, arg)
@@ -167,6 +183,68 @@ def getqueuenums(my_ranked_stats, queue):
     else: 
       return flex
 
+#stat==0 KDA -- stat==1 Winrate
+def getchampstats(ctx, sumID, champ):
+  me = getsuminfo(ctx,sumID)
+
+  name = champ.title()
+
+  champ_id=getchampid(champ_list,name)
+
+  match_details=[]
+  mastery_pages = watcher.champion_mastery.by_summoner(my_region, me['id'])
+  masterylevel=0
+  masterypoints=0
+  masteryTokens=0
+  kills = 0
+  deaths = 0
+  assists = 0
+  wins = 0
+  samplegames = 10
+  #Get match info
+  try:
+      match_history = watcher.match.matchlist_by_account(my_region, me['accountId'],champion = champ_id)
+  except ApiError as err:
+      if err.response.status_code == 404:
+        print("No games found")
+        return ChampStats(champ_id,name,0,0,0,"N/A","N/A", "N/A", "N/A","N/A","N/A","N/A",0,0)
+      elif err.response.status_code == 403:
+        print("Error 403")
+        return ChampStats(champ_id,name,0,0,0,"N/A","N/A", "N/A", "N/A","N/A","N/A","N/A",0,0)
+  
+  num_games=len(match_history["matches"])
+  #print(match_history)
+  
+  for x in range(samplegames):
+    #print (num_games)
+    if x >= num_games:
+      samplegames = num_games
+      break
+    match_details.append(watcher.match.by_id(my_region, match_history["matches"][x]["gameId"]))
+    for y in range(10):
+      if match_details[x]["participantIdentities"][y]["player"]["accountId"] == me['accountId']:
+        participant = y
+        break;
+    kills = kills + match_details[x]["participants"][participant]["stats"]["kills"]
+    deaths = deaths + match_details[x]["participants"][participant]["stats"]["deaths"]
+    assists = assists + match_details[x]["participants"][participant]["stats"]["assists"]
+    if match_details[x]["participants"][participant]["stats"]["win"] == True:
+      wins = wins +1 
+  
+
+  if deaths != 0:
+    kda = "{:.2f}".format((kills+assists)/deaths)
+  else:
+    kda = "Perfect"
+
+  winrate ="{:.0f}".format(wins/samplegames*100)
+  for z in range(len(mastery_pages)):
+    if str(mastery_pages[z]["championId"]) == str(champ_id):
+      masterylevel = mastery_pages[z]["championLevel"]
+      masterypoints = mastery_pages[z]["championPoints"]
+      masteryTokens = mastery_pages[z]["tokensEarned"]
+
+  return ChampStats(champ_id,name,masterypoints,masterylevel,masteryTokens,wins,match_history["totalGames"] - wins, winrate, kills,deaths,assists,kda,match_history["totalGames"],samplegames)
 
 
 
@@ -178,13 +256,14 @@ def getqueuenums(my_ranked_stats, queue):
 async def rank(ctx, arg):
     #Checks for errors returned from the API
     #print(versions)
+    print("Command received: stats")
     me = getsuminfo(ctx,arg)
     if me == 0:
       return
     
 
     #For Debugging
-    print(me)
+    #print(me)
 
     #Summoner Level e.g. 189
     sumlevel = me['summonerLevel']
@@ -193,17 +272,17 @@ async def rank(ctx, arg):
     iconlink = "http://ddragon.leagueoflegends.com/cdn/" + latest_version +"/img/profileicon/" + str(icon)+".png"
     
     my_ranked_stats = watcher.league.by_summoner(my_region, me['id'])
-    print(my_ranked_stats)
+    #print(my_ranked_stats)
       
     #Get stats for solo/flex queues
     soloduostats = getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,0))
     flexstats = getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,1))
 
-    print(soloduostats.fullrank)
+    #print(soloduostats.fullrank)
 
     mastery_pages = watcher.champion_mastery.by_summoner(my_region, me['id'])
     topchamp = mastery_pages[0]
-    print(mastery_pages)
+    #print(mastery_pages)
     
 
     #print(returnchamp(champ_list,topchamp['championId'],'name'))
@@ -222,14 +301,16 @@ async def rank(ctx, arg):
     embedVar.add_field(name = "Top Champion", value = returnchamp(champ_list,topchamp['championId'],'name')+" ("+str(topchamp['championPoints'])+" Mastery Points)" , inline=True)
     embedVar.set_image(url=iconlink)
     #Image Link for debugging
-    print(iconlink)
+    #print(iconlink)
     
     #Send Reply
     await ctx.send(embed=embedVar)
+    print("Command completed: stats")
 
 #FREE CHAMPION ROTATION
 @bot.command(name='free', help='Get the current free champion rotation')
 async def free(ctx):
+  print("Command received: free")
   #Getting champ ids from data dragon
   free_champ_rot = watcher.champion.rotations(my_region)
   champ_names = []
@@ -248,11 +329,12 @@ async def free(ctx):
 
   #Send embed
   await ctx.send(embed=embedVar)
+  print("Command completed: game")
 
 #GET CURRENT GAME INFO
 @bot.command(name='game', help='Get current game info for a summoner')
 async def game(ctx, arg, sum='None'):
-  
+  print("Command received: game")
   #Get summoner info
   me = getsuminfo(ctx,arg)
   
@@ -267,7 +349,7 @@ async def game(ctx, arg, sum='None'):
         await ctx.send('Please contact the bot\'s developer: Error 403')
         return
   
-  print(specinfo)
+  #print(specinfo)
   blue=team()
   red=team()
   gametime = str(int((specinfo["gameLength"]+180)/60)) +":" + str(int(specinfo["gameLength"])%60)
@@ -330,7 +412,7 @@ async def game(ctx, arg, sum='None'):
       mode = 0
       red.ranks.append(getrankedstats(my_ranked_stats,getqueuenums(my_ranked_stats,mode)).fullrank)
 
-  print(blueroles)
+  #print(blueroles)
 
 
  
@@ -353,8 +435,51 @@ async def game(ctx, arg, sum='None'):
   await ctx.send(embed=GeneralEmbed)
   await ctx.send(embed=BlueEmbed)
   await ctx.send(embed=RedEmbed)
+  print("Command completed: game")
+  
+@bot.command(name='champ', help='get summoner\'s stats for a specific champion')
+async def champ(ctx,arg1,arg2):
+  print("Command received: champ")
+  
+  champion = getchampstats(ctx,arg1,arg2)
+
+  iconlink="http://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons/" + str(champion.key) + ".png"
+  
+  #Icon Main Colors
+  print("Starting")
+  req = Request(iconlink, headers={'User-Agent': 'Mozilla/5.0'})
+  icon = urlopen(req)
+  color_thief = ColorThief(icon)
+  main_color = color_thief.get_color(quality=6)
+  print(main_color)
+  hex_str = "0x" + ("%02X%02X%02X" % main_color)
+  main_color_hex = int(hex_str, 16) + 0x200
+
+
+  #Champion Mastery Text Creation
+  if champion.masteryLevel != 7:
+    if champion.masteryTokens == 1:
+      masterytext=str(champion.masteryPoints) + " ( Level "+str(champion.masteryLevel)+" - Has "+ str(champion.masteryTokens) + " token for Level " + str(champion.masteryLevel + 1) + " )"
+    else:
+      masterytext=str(champion.masteryPoints) + " ( Level "+str(champion.masteryLevel)+" - Has "+ str(champion.masteryTokens) + " tokens for Level " + str(champion.masteryLevel + 1) + " )"
+  else:
+    masterytext=str(champion.masteryPoints) + " ( Level "+str(champion.masteryLevel)+" )"
   
   
+  #Embed Creation 
+  embedVar = discord.Embed(title=arg1 + " - " + arg2, description='', color=main_color_hex)
+  embedVar.add_field(name="Games Played", value=champion.totalmatches, inline=True)
+  embedVar.add_field(name="Winrate", value=str(champion.winrate) + "%", inline=True)
+  embedVar.add_field(name="Champion Mastery", value=masterytext, inline=False)
+  
+  embedVar.set_image(url=iconlink)
+  #Image Link for debugging
+  #print(iconlink)
+  
+  #Send Reply
+  await ctx.send(embed=embedVar)
+  print("Command completed: stats")
+
   
 
 
