@@ -1,4 +1,4 @@
-# CyberBot Zoe (discbot) : My first attempt at making a Discord bot using python
+# CyberBot Zoe : An open-source league of legends discord bot
 
 ## About CyberBot Zoe
 Currently used in a private server - still in development
