@@ -1,16 +1,75 @@
-# CyberBot Zoe : An open-source league of legends discord bot
+# CyberBot Zoe
 
-## Commands
-**poro stats `summoner name`**: displays the summoner's level, rank and winrate (solo/duo and flex queues)
+A discord bot that uses the Riot Games API to provide information about summoners.
+  
+**This bot supports only the EUNE region** and has the following commands:
 
-**poro free**: displays the current free champion rotation
+- [Free Champion Rotation](#free-champion-rotation)    
+- [Summoner Stats](#summoner-stats)    
+- [Game Info](#game-info)    
+- [Champion Info](#champion-info)    
 
-**poro game `summoner name`**: displays information about a summoner's current game (teams' ranks, levels, names, champions, etc)
 
-**poro champ `summoner name` `champion name`**: displays specific stats about a summoner's champion (games played, winrate, mastery level, etc)
+## Free Champion Rotation
 
-**Note that this bot currently only supports the EUNE region**
+**Command syntax**  
+  
+> **poro free**
 
+**Command description**  
+  
+  Displays the current free champion rotation
+ 
+ **Command output**  
+   
+<img src="https://github.com/gselivanof/cyberbot-zoe/blob/master/README_ASSETS/free.png" width="140" >
+</br>
+
+## Summoner Stats
+
+**Command syntax**  
+  
+> **poro stats `summoner name`**
+
+**Command description**  
+  
+  Displays the summoner's level, rank and winrate (solo/duo and flex queues)
+ 
+ **Command output**  
+   
+<img src="https://github.com/gselivanof/cyberbot-zoe/blob/master/README_ASSETS/summoner.png" width="300" >
+</br>
+
+## Game Info
+
+**Command syntax**  
+  
+> **poro game `summoner name`**
+
+**Command description**  
+  
+  Displays information about a summoner's current game (teams' ranks, levels, names, champions, etc)
+ 
+ **Command output**  
+   
+<img src="https://github.com/gselivanof/cyberbot-zoe/blob/master/README_ASSETS/current_game.png" width="300" >
+</br>
+
+
+## Champion Info
+
+**Command syntax**  
+  
+> **poro champ `summoner name` `champion name`**
+
+**Command description**  
+  
+  Displays specific stats about a summoner's champion (games played, winrate, mastery level, etc)
+ 
+ **Command output**  
+   
+<img src="https://github.com/gselivanof/cyberbot-zoe/blob/master/README_ASSETS/champion2.png" width="300" >
+</br>
 
 
 ## Used in this project:
